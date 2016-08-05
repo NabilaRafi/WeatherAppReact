@@ -1,51 +1,64 @@
 var React = require('react');
 var ReactDOM = require('react-dom');
 var classNames = require('classnames');
+var Geosuggest = require('react-geosuggest').default;
 
 var Api = require('./utils/api');
 
-
 var query = ''; // Expects something like this ?city=London,Paris,Berlin,Madrid
-var cities = []; // Transform query string cities into an array
-var citiesWeather = []; // API cache
+var selectedCityWeather;
 var currentCity = 0; // Index of current city displayed
+var currentCityName='London';
 
 var Weather = React.createClass({
     render: function() {
-        // Build class names with dynamic data
-var weatherClass = classNames('wi wi-owm-' + this.state.weather);
-var bgColorClass = 'weather-widget '; // very-warm, warm, normal, cold, very-cold
+        
+        //Build class names with dynamic data
+    var weatherClass = classNames('wi wi-owm-' + this.state.weather);
+    var bgColorClass = 'weather-widget '; // very-warm, warm, normal, cold, very-cold
 
-// Set the background colour based on the temperature
-if (this.state.temp >= 30) {
-    bgColorClass += 'very-warm';
-}
-else if (this.state.temp > 20 && this.state.temp < 30) {
-    bgColorClass += 'warm';
-}
-else if (this.state.temp > 10 && this.state.temp < 20) {
-    bgColorClass += 'normal';
-}
-else if (this.state.temp > 0 && this.state.temp < 10) {
-    bgColorClass += 'cold';
-}
-else if (this.state.temp <= 0) {
-    bgColorClass += 'very-cold';
-}
+        // Set the background colour based on the temperature
+        if (this.state.temp >= 30) {
+        bgColorClass += 'very-warm';
+        }
+        else if (this.state.temp > 20 && this.state.temp < 30) {
+        bgColorClass += 'warm';
+        }
+        else if (this.state.temp > 10 && this.state.temp < 20) {
+        bgColorClass += 'normal';
+        }
+        else if (this.state.temp > 0 && this.state.temp < 10) {
+        bgColorClass += 'cold';
+        }
+        else if (this.state.temp <= 0) {
+        bgColorClass += 'very-cold';
+        }
+        
+       var fixtures =[];
+    // Render the DOM elements
+    return (<div>
+                <div>
+                    <Geosuggest
+                      placeholder="Enter the location ..."
+                      initialValue=""
+                      fixtures={fixtures}
+                      onSuggestSelect={this.onSuggestSelect}
+                      location={new google.maps.LatLng(53.558572, 9.9278215)}
+                      radius="20" />
+                </div>
 
-// Render the DOM elements
-return <div className={bgColorClass}>
-    <h1 className="city">{cities[currentCity]}</h1>
-    <div className="weather">
-        <i className={weatherClass}></i>
-    </div>
-    <section className="weather-details">
-        <div className="temp"><span className="temp-number">{this.state.temp}</span><span className="wi wi-degrees"></span></div>
-        <div className="humidity"><i className="wi wi-raindrop"></i>{this.state.humidity} %</div>
-        <div className="wind"><i className="wi wi-small-craft-advisory" >{this.state.wind}</i> <span className="vel">Km/h</span></div>
-    </section>
-</div>
-
+                <div className={bgColorClass}>
+                    <h1 className="city">{currentCityName}</h1>
+                    <div className="weather">
+                        <i className={weatherClass}></i>
+                    </div>
+                    <section className="weather-details">
+                        <div className="temp"><span className="temp-number">{this.state.temp}</span><span className="wi wi-degrees"></span>C</div>
+                        <div className="humidity"><i className="wi wi-raindrop"></i>{this.state.humidity} %</div>
+                        <div className="wind"><i className="wi wi-small-craft-advisory" >{this.state.wind}</i> <span className="vel">Km/h</span></div>
+                    </section>
+                </div>
+            </div>);
 },
 
 // Init data for UI
@@ -54,73 +67,76 @@ getInitialState: function() {
         weather: '',
         temp: 0,
         humidity: 0,
-        wind: 0
+        wind: 0,
+        lat: 53.558572,
+        lng : 9.9278215
     }  
 },
     
 
     
 fetchData: function() {
+    console.log('Fetch data');
+    console.log(this.state.lat+" lat");
 
-    // Get the data from the cache if possible
-    if (citiesWeather[currentCity]) {
-        this.updateData();   
-    }
-    else {
+        console.log("if else");
         // Request new data to the API
-        Api.get(cities[currentCity])
+        Api.get({lat:this.state.lat,lng:this.state.lng})
             .then(function(data) {
-                citiesWeather[currentCity] = data;
+                selectedCityWeather = data;
+                currentCityName=data.name;
                 this.updateData();
         }.bind(this));
-    }
+//    
 },
     
 updateData: function() {
     // Update the data for the UI
     this.setState({
-        weather: citiesWeather[currentCity].weather[0].id,
-        temp: Math.round(citiesWeather[currentCity].main.temp - 273.15), // Kelvin to Celcius
-        humidity: Math.round(citiesWeather[currentCity].main.humidity),
-        wind: Math.round(citiesWeather[currentCity].wind.speed)
+        weather: selectedCityWeather.weather[0].id,
+        temp: Math.round(selectedCityWeather.main.temp - 273.15), // Kelvin to Celcius
+        humidity: Math.round(selectedCityWeather.main.humidity),
+        wind: Math.round(selectedCityWeather.wind.speed),
+        name:selectedCityWeather.name
+    
     });
 },
 
 // Called before the render method is executed
 componentWillMount: function() {
 
-    // Get the query string data
-    query = location.search.split('=')[1];
-
-    // Figure out if we need to display more than one city's weather
-    if (query !== undefined) {
-        cities = query.split(','); // Get an array of city names
-
-        // Set the interval to load new cities
-        if (cities.length > 1) {
-            setInterval((function() {
-                currentCity++;
-                if (currentCity === cities.length) {
-                    currentCity = 0;
-                }
-                this.fetchData(); // Reload the city every 5 seconds
-            }).bind(this), 5000);
-        }
-    }
-    else {
-        cities[0] = 'London'; // Set London as the default city
-    }
-
     // Create a timer to clear the cache after 5 minutes, so we can get updated data from the API
     setInterval(function() {
-        citiesWeather = []; // Empty the cache
+        selectedCityWeather = []; // Empty the cache
     }, (1000*60*5));
 
     this.fetchData();
 },
+                                
+onSuggestSelect: function(suggest) {
+    console.log(suggest);
+      
+      var geocoder = new google.maps.Geocoder();
+
+        geocoder.geocode({ 'placeId': suggest.placeId }, function (results, status) {
+            var latitude;
+            var longitude;
+
+            if (status == google.maps.GeocoderStatus.OK) {
+                 latitude = results[0].geometry.location.lat();
+                 longitude = results[0].geometry.location.lng();            
+
+            }
+            this.setState ({
+                lat :latitude,
+                lng:longitude
+            });   
+        }.bind(this));
+    console.log('API Call');
+    this.fetchData();
+    console.log('Call end');
+  },
+ 
 });
 
- //Assign the React component to a DOM element
-    
-var element = React.createElement(Weather, {});
-ReactDOM.render(element, document.querySelector('.container'));
+ReactDOM.render(<Weather />, document.querySelector('.container'));
